@@ -1,0 +1,66 @@
+USE [master]
+GO
+/****** Object:  StoredProcedure [dbo].[Sp_RestCall]    Script Date: 16-02-2024 06:12:43 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER   Procedure [dbo].[Sp_RestCall] as
+/*
+-- Enable Ole Automation Procedures (if not already enabled)
+EXEC sp_configure 'show advanced options', 1;
+RECONFIGURE;
+EXEC sp_configure 'Ole Automation Procedures', 1;
+RECONFIGURE;
+*/
+
+BEGIN TRY
+-- Declare variables
+DECLARE @Object INT;
+DECLARE @ResponseText VARCHAR(8000);
+
+-- Create the object
+EXEC sp_OACreate 'MSXML2.ServerXMLHTTP', @Object OUT;
+
+-- Open a connection to the specified URL
+EXEC sp_OAMethod @Object, 'open', NULL, 'GET', 'https://api.veriphone.io/v2/verify?phone=9867205725&key=EC375B16AB0C432E8D3BEF5DABBAD9FE', false;
+
+-- Send the request
+EXEC sp_OAMethod @Object, 'send';
+
+-- Get the response text
+EXEC sp_OAGetProperty @Object, 'responseText', @ResponseText OUT;
+
+-- Close the object
+EXEC sp_OADestroy @Object;
+
+-- Output the response text
+--SELECT @ResponseText;
+
+/*
+-- Create a table to store the extracted data
+CREATE TABLE PhoneInfo (
+    [Key] NVARCHAR(50),
+    [Value] NVARCHAR(MAX)
+);
+*/
+-- Insert key-value pairs into the table using dynamic SQL
+DECLARE @sql NVARCHAR(MAX) = N'';
+
+SELECT @sql += N'
+INSERT INTO PhoneInfo ([Key], [Value])
+SELECT [key], [value]
+FROM OPENJSON(@ResponseText)';
+
+EXEC sp_executesql @sql, N'@ResponseText NVARCHAR(MAX)', @ResponseText;
+
+-- Query the table to view the extracted data
+SELECT * FROM PhoneInfo;
+
+
+
+END TRY
+BEGIN CATCH
+    SELECT ERROR_MESSAGE() AS ErrorMessage;
+END CATCH;
+
